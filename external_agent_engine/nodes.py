@@ -4,7 +4,7 @@ from datetime import datetime
 import yfinance as yf
 import ollama
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_community.tools import DuckDuckGoSearchResults
 from external_agent_engine.graph_state import WorkflowState
 
 # We will use your existing local model preference
@@ -25,15 +25,15 @@ def researcher_node(state: WorkflowState) -> dict:
         query_response = ollama.chat(model=MODEL_NAME, messages=[{'role': 'user', 'content': query_prompt}])
         search_query = query_response['message']['content'].strip(' "\'')
     except:
-        search_query = "MSFT latest news"
+        search_query = f"{ticker_symbol} latest news"
         
-    print("🌐 [SYSTEM] Scraping live news articles...")
-    search_tool = DuckDuckGoSearchRun()
+    print("🌐 [SYSTEM] Scraping live news articles with citations...")
+    # Using SearchResults instead of SearchRun to capture URLs!
+    search_tool = DuckDuckGoSearchResults() 
     try:
         news_data = search_tool.invoke(search_query)
     except:
         news_data = "No news found."
-
     # 2. Quantitative Search (Hard Numbers)
     print("📈 [SYSTEM] Fetching exact market data via yfinance...")
     try:
@@ -121,6 +121,10 @@ def writer_node(state: WorkflowState) -> dict:
     system_prompt = """
     You are an executive ghostwriter. Take the provided raw data and format it 
     into a polished, highly professional Executive Summary. Use markdown headers.
+    
+    CRITICAL INSTRUCTION: You MUST include a 'Sources Cited' section at the very bottom 
+    of the report. Extract the URLs from the raw news data and list them as bullet points.
+    If you do not include the URLs, the report will be rejected.
     """
     
     try:
