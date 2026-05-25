@@ -1,0 +1,28 @@
+# Python environment
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Local Databases & State (DO NOT push test data to GitHub!)
+vector_db/
+global_research_center.db
+*.sqlite3
+*.log
+
+# Temporary processing files
+temp_*.pdf
+*.pdf
+*.wav
+*.html
+*.md
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Environment Variables (Keep your API keys safe)
+.env
+
+# Processed Data
+archive/
