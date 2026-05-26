@@ -13,12 +13,29 @@ MODEL_NAME = "llama3"
 def researcher_node(state: WorkflowState) -> dict:
     """
     Worker 1: The Multi-Tool Researcher
-    Goal: Scrape DDG for news AND yfinance for exact quantitative numbers.
+    Goal: Scrape DDG, fetch yfinance data, AND retrieve historical memory.
     """
     print("⚙️ [SYSTEM] Researcher Node Activated...")
     objective = state.get("user_objective", "No objective provided.")
     
-    # 1. Qualitative Search (News)
+    # 1. Dynamic Ticker Extraction (Moved to the top so all tools can use it!)
+    print("🔍 [SYSTEM] Dynamically extracting ticker symbol...")
+    ticker_prompt = f"Extract the stock ticker symbol from this objective: '{objective}'. Reply ONLY with the 1-5 letter ticker symbol (e.g., AAPL, TSLA, MSFT). Do not include any other words, symbols, or punctuation."
+    
+    try:
+        ticker_response = ollama.chat(model=MODEL_NAME, messages=[{'role': 'user', 'content': ticker_prompt}])
+        ticker_symbol = ticker_response['message']['content'].strip(' "\'\n').upper()
+        
+        if len(ticker_symbol) > 5 or " " in ticker_symbol:
+            print(f"⚠️ [WARNING] LLM failed strict extraction. Defaulting to SPY. Raw output: {ticker_symbol}")
+            ticker_symbol = "SPY"
+    except Exception as e:
+        print(f"⚠️ [WARNING] Ticker extraction failed: {e}")
+        ticker_symbol = "SPY"
+        
+    print(f"🎯 [SYSTEM] Target acquired: {ticker_symbol}")
+
+    # 2. Qualitative Search (News)
     print("🧠 [SYSTEM] Formulating optimal news query...")
     query_prompt = f"Convert this into a news search query (3-5 words). Objective: {objective}. Reply ONLY with the query."
     try:
@@ -28,42 +45,22 @@ def researcher_node(state: WorkflowState) -> dict:
         search_query = f"{ticker_symbol} latest news"
         
     print("🌐 [SYSTEM] Scraping live news articles with citations...")
-    # Using SearchResults instead of SearchRun to capture URLs!
     search_tool = DuckDuckGoSearchResults() 
     try:
         news_data = search_tool.invoke(search_query)
     except:
         news_data = "No news found."
-    # 2. Quantitative Search (Hard Numbers)
+
+    # 3. Quantitative Search (Hard Numbers)
     print("📈 [SYSTEM] Fetching exact market data via yfinance...")
     try:
-        print("🔍 [SYSTEM] Dynamically extracting ticker symbol...")
-        ticker_prompt = f"Extract the stock ticker symbol from this objective: '{objective}'. Reply ONLY with the 1-5 letter ticker symbol (e.g., AAPL, TSLA, MSFT). Do not include any other words, symbols, or punctuation."
-        
-        try:
-            ticker_response = ollama.chat(model=MODEL_NAME, messages=[{'role': 'user', 'content': ticker_prompt}])
-            ticker_symbol = ticker_response['message']['content'].strip(' "\'\n').upper()
-            
-            # Defensive programming: If the LLM disobeys and writes a paragraph, fallback to the S&P 500
-            if len(ticker_symbol) > 5 or " " in ticker_symbol:
-                print(f"⚠️ [WARNING] LLM failed strict extraction. Defaulting to SPY. Raw output: {ticker_symbol}")
-                ticker_symbol = "SPY"
-        except Exception as e:
-            print(f"⚠️ [WARNING] Ticker extraction failed: {e}")
-            ticker_symbol = "SPY"
-            
-        print(f"🎯 [SYSTEM] Target acquired: {ticker_symbol}")
         ticker = yf.Ticker(ticker_symbol)
-        
-        # 1. The Bulletproof Method: Pull the last day's exact trading row
         hist = ticker.history(period="1d")
         
         if not hist.empty:
-            # Grab the final closing price and volume from the dataframe
             current_price = round(hist['Close'].iloc[-1], 2)
             volume = int(hist['Volume'].iloc[-1])
         else:
-            # 2. The Fallback: If history fails, try multiple info keys
             info = ticker.info
             current_price = info.get('currentPrice', info.get('regularMarketPrice', info.get('previousClose', 'N/A')))
             volume = info.get('volume', info.get('regularMarketVolume', 'N/A'))
@@ -72,7 +69,33 @@ def researcher_node(state: WorkflowState) -> dict:
     except Exception as e:
         market_data = f"Market data unavailable: {e}"
 
-    # 3. Combine Data Streams into the LLM
+    # 4. NEW: Historical Memory Retrieval (SQLite)
+    print("🗄️ [SYSTEM] Querying historical archives for longitudinal context...")
+    try:
+        import sqlite3
+        conn = sqlite3.connect("global_research_center.db")
+        cursor = conn.cursor()
+        
+        # Search for the most recent report mentioning this specific ticker
+        cursor.execute('''
+            SELECT timestamp, report_content FROM research_reports 
+            WHERE objective LIKE ? 
+            ORDER BY timestamp DESC LIMIT 1
+        ''', (f'%{ticker_symbol}%',))
+        
+        past_report = cursor.fetchone()
+        conn.close()
+        
+        if past_report:
+            historical_data = f"Past Report Date: {past_report[0]}\nPast Report Excerpt: {past_report[1][:1500]}..."
+            print(f"📖 [SYSTEM] Successfully loaded memory from {past_report[0]}")
+        else:
+            historical_data = "No historical reports found for this asset in the database. This is a baseline report."
+            print("📖 [SYSTEM] No historical memory found. Creating baseline.")
+    except Exception as e:
+        historical_data = f"Memory retrieval bypassed (No DB found): {e}"
+
+    # 5. Combine Data Streams into the LLM
     print("⏳ [SYSTEM] Compiling Multi-Source research...")
     prompt = f"""
     You are an expert financial researcher. Your objective is: {objective}.
@@ -102,6 +125,7 @@ def researcher_node(state: WorkflowState) -> dict:
 
     current_workspace = state.get("workspace_data", {})
     current_workspace["raw_research"] = structured_data
+    current_workspace["historical_context"] = historical_data # 🔴 NEW INJECTION
     
     return {
         "workspace_data": current_workspace,
@@ -110,36 +134,38 @@ def researcher_node(state: WorkflowState) -> dict:
 
 def writer_node(state: WorkflowState) -> dict:
     """
-    Worker 2: The Writer
-    Goal: Take the raw data from the workspace and write the final output.
+    Worker 2: The Writer (Now with Historical Reasoning)
     """
     print("⚙️ [SYSTEM] Writer Node Activated...")
     
-    # Retrieve the data left behind by the Researcher Node
     raw_research = state.get("workspace_data", {}).get("raw_research", "")
+    historical_context = state.get("workspace_data", {}).get("historical_context", "") # 🔴 GRAB CONTEXT
     
     system_prompt = """
-    You are an executive ghostwriter. Take the provided raw data and format it 
-    into a polished, highly professional Executive Summary. Use markdown headers.
+    You are a Quantitative Research Ghostwriter. Format the raw data into a polished Executive Summary.
     
-    CRITICAL INSTRUCTION: You MUST include a 'Sources Cited' section at the very bottom 
-    of the report. Extract the URLs from the raw news data and list them as bullet points.
-    If you do not include the URLs, the report will be rejected.
+    CRITICAL INSTRUCTIONS:
+    1. Use markdown headers and bullet points.
+    2. 'Longitudinal Analysis': You MUST explicitly compare the LIVE DATA against the HISTORICAL CONTEXT. Highlight any shifts in price, volume, or sentiment.
+    3. 'Sources Cited': Extract the raw HTTP links from the LIVE DATA and list them as bullet points at the very bottom. 
+       - NEVER use placeholders like '[Insert URLs]'. 
+       - If no actual links are present in the provided data, you MUST write exactly: 'No external links available for this report.'
     """
+    
+    user_prompt = f"LIVE DATA:\n{raw_research}\n\n--- \nHISTORICAL CONTEXT:\n{historical_context}"
     
     try:
         response = ollama.chat(
             model=MODEL_NAME,
             messages=[
                 {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': f"Raw Data:\n{raw_research}"}
+                {'role': 'user', 'content': user_prompt}
             ]
         )
         final_draft = response['message']['content']
     except Exception as e:
         final_draft = f"Error during writing phase: {e}"
 
-    # We append the final result to the message history and signal completion
     return {
         "messages": [AIMessage(content=final_draft)],
         "next_action": "review_draft" 
