@@ -68,12 +68,13 @@ Global-Research-AI-Platform/
 └── internal_rag_engine/           # Engine A: Vector Database Retrieval
     ├── main.py                    # PDF Ingestion & Pipeline execution
     └── retriever.py               # Semantic search and hardware-optimized chunking
+```
 
 ⚙️ Local Setup & Installation
+
 1. Prerequisites
 Ensure you have Python 3.10+ installed and Ollama running locally.
 Pull your preferred local model (default is Llama 3):
-
 ```bash
 ollama run llama3
 ```
@@ -106,8 +107,8 @@ Navigate to http://localhost:8501. Select your engine, input a target asset (e.g
 
 🗺️ Roadmap / Future Architecture
 
--[ ] Cloud Migration: Containerize services via Docker for deployment on AWS ECS.
+[ ] Cloud Migration: Containerize services via Docker for deployment on AWS ECS.
 
--[ ] LLMOps Integration: Implement LangSmith tracing for visual agent trajectory monitoring and token latency tracking.
+[ ] LLMOps Integration: Implement LangSmith tracing for visual agent trajectory monitoring and token latency tracking.
 
--[ ] Expanded Toolset: Integrate SEC EDGAR API for live 8-K/10-K scraping to supplement yfinance quantitative data.
+[ ] Expanded Toolset: Integrate SEC EDGAR API for live 8-K/10-K scraping to supplement yfinance quantitative data.
