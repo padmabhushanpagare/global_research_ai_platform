@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, UploadFile, File
 from pydantic import BaseModel
 import sys
@@ -13,7 +16,58 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "internal_rag_engine"))
 
 from external_agent_engine.graph import build_automation_graph
 
-app = FastAPI(title="Global Research Master API")
+# --- EVENT-DRIVEN AUTOMATION ---
+
+async def automated_morning_briefing():
+    """The cron job that runs autonomously."""
+    print("\n🌅 [SCHEDULER] Initiating automated morning briefings...")
+    
+    # The portfolio of assets we want to track automatically
+    target_assets = ["TSLA", "NVDA"] 
+    
+    for ticker in target_assets:
+        print(f"🤖 [SCHEDULER] Triggering Engine B for {ticker}...")
+        objective = f"Analyze the latest news, institutional sentiment, and market data for {ticker}."
+        
+        try:
+            # 1. Import the function instead of the variable
+            from external_agent_engine.graph import build_automation_graph
+            
+            # 2. Call the function to compile the engine
+            app = build_automation_graph()
+            
+            # 3. Run the agent in the background
+            inputs = {"user_objective": objective, "workspace_data": {}}
+            result = app.invoke(inputs) 
+            
+            print(f"✅ [SCHEDULER] {ticker} report compiled and archived.")
+        except Exception as e:
+            print(f"❌ [SCHEDULER] Failed to process {ticker}: {e}")
+        
+        # Pause for 5 seconds between assets to avoid rate-limiting the DuckDuckGo/yfinance APIs
+        await asyncio.sleep(5) 
+        
+    print("🏁 [SCHEDULER] All morning briefings complete. Waiting for next cycle.\n")
+
+# FastAPI Lifespan Manager (Starts the scheduler on boot)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("⏱️ [SYSTEM] Booting Event-Driven Scheduler...")
+    scheduler = AsyncIOScheduler()
+    
+    # ⚠️ FOR TESTING: Run every 2 minutes
+    # (For Production: trigger='cron', hour=6, minute=0)
+    scheduler.add_job(automated_morning_briefing, 'interval', minutes=30)
+    
+    scheduler.start()
+    yield # The API runs while yielding
+    
+    print("🛑 [SYSTEM] Shutting down Scheduler...")
+    scheduler.shutdown()
+
+# --- APP INITIALIZATION ---
+# Update your FastAPI app initialization to include the lifespan:
+app = FastAPI(title="Global Research API", lifespan=lifespan)
 
 # --- ENGINE B: LIVE MARKET AGENT ---
 print("⚙️ [API] Booting up LangGraph Engine...")

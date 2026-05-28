@@ -70,7 +70,7 @@ def retrieve_multi_query_context(document_name=None):
         for metric, search_string in queries.items():
             results = collection.query(
                 query_texts=[search_string],
-                n_results=5, # 🔴 UPGRADED from 2 to 5 to catch adjacent tables
+                n_results=4, # 🔴 UPGRADE from 2 to 5 to catch adjacent tables
                 where=where_filter
             )
             
