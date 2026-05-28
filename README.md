@@ -73,18 +73,19 @@ Global-Research-AI-Platform/
 1. Prerequisites
 Ensure you have Python 3.10+ installed and Ollama running locally.
 Pull your preferred local model (default is Llama 3):
+
 ```bash
 ollama run llama3
 ```
 
 2. Clone & Install
-
+```bash
 git clone https://github.com/padmabhushanpagare/global_research_ai_platform.git
 cd global_research_ai_platform
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
+```
 ⚡ Execution Protocol
 Because of the decoupled architecture, the Backend API and the Frontend UI must be run as separate microservices.
 
@@ -104,8 +105,9 @@ streamlit run master_app.py
 Navigate to http://localhost:8501. Select your engine, input a target asset (e.g., TSLA), and execute the pipeline.
 
 🗺️ Roadmap / Future Architecture
-[ ] Cloud Migration: Containerize services via Docker for deployment on AWS ECS.
 
-[ ] LLMOps Integration: Implement LangSmith tracing for visual agent trajectory monitoring and token latency tracking.
+-[ ] Cloud Migration: Containerize services via Docker for deployment on AWS ECS.
 
-[ ] Expanded Toolset: Integrate SEC EDGAR API for live 8-K/10-K scraping to supplement yfinance quantitative data.
+-[ ] LLMOps Integration: Implement LangSmith tracing for visual agent trajectory monitoring and token latency tracking.
+
+-[ ] Expanded Toolset: Integrate SEC EDGAR API for live 8-K/10-K scraping to supplement yfinance quantitative data.
